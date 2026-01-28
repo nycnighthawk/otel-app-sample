@@ -8,7 +8,16 @@
   <version>1.0.0</version>
 
   <properties>
-    <maven.compiler.release>21</maven.compiler.release>
+    <!-- Target OpenJDK 17+ -->
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <slf4j.version>2.0.16</slf4j.version>
+    <spark.version>2.9.4</spark.version>
+    <postgres.version>42.7.4</postgres.version>
+    <gson.version>2.11.0</gson.version>
+    <shade.version>3.6.0</shade.version>
+    <compiler.plugin.version>3.13.0</compiler.plugin.version>
   </properties>
 
   <dependencies>
@@ -16,57 +25,103 @@
     <dependency>
       <groupId>com.sparkjava</groupId>
       <artifactId>spark-core</artifactId>
-      <version>2.9.4</version>
+      <version>${spark.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- Force SLF4J API to match the binding version -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+
+    <!-- SLF4J binding -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>${slf4j.version}</version>
     </dependency>
 
     <!-- JDBC driver -->
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
-      <version>42.7.4</version>
+      <version>${postgres.version}</version>
     </dependency>
 
     <!-- Simple JSON -->
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
-      <version>2.11.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-simple</artifactId>
-      <version>2.0.16</version>
+      <version>${gson.version}</version>
     </dependency>
   </dependencies>
 
   <build>
+    <resources>
+      <!-- Ensure SPA assets under src/main/resources/public are packaged -->
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+      </resource>
+    </resources>
+
     <plugins>
+      <!-- Enforce JDK 17+ at build time -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.4.2</version>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.5.0</version>
+        <executions>
+          <execution>
+            <id>enforce-java</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[17,)</version>
+                </requireJavaVersion>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${compiler.plugin.version}</version>
         <configuration>
-          <archive>
-            <manifest>
-              <mainClass>com.example.shop.App</mainClass>
-            </manifest>
-          </archive>
+          <release>${maven.compiler.release}</release>
         </configuration>
       </plugin>
 
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <version>3.7.1</version>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${shade.version}</version>
         <executions>
           <execution>
-            <id>copy-deps</id>
             <phase>package</phase>
-            <goals><goal>copy-dependencies</goal></goals>
+            <goals>
+              <goal>shade</goal>
+            </goals>
             <configuration>
-              <outputDirectory>${project.build.directory}/deps</outputDirectory>
-              <includeScope>runtime</includeScope>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>com.example.shop.App</mainClass>
+                </transformer>
+              </transformers>
             </configuration>
           </execution>
         </executions>
