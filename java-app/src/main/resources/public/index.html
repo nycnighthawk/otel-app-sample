@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-      .row { display: flex; gap: 20px; flex-wrap: wrap; }
-      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; width: min(560px, 100%); }
+      .row { display: flex; gap: 20px; }
+      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; width: 100%; }
       input, button { padding: 8px; }
       table { width: 100%; border-collapse: collapse; }
       td, th { border-bottom: 1px solid #eee; padding: 8px; text-align: left; }
@@ -16,12 +16,12 @@
     </style>
   </head>
   <body>
-    <h1>Hackathon Shop (Java)</h1>
+    <h1>Hackathon Shop (Uninstrumented)</h1>
     <p>
+      Bad query mode (server env): <code id="bad_query_mode">unknown</code> |
       Health: <a href="/api/health">/api/health</a> |
       Orders: <a href="/api/orders">/api/orders</a> |
-      Bad: <a href="/api/bad">/api/bad</a> |
-      Bad mode: <a href="/api/bad/mode">/api/bad/mode</a>
+      Bad: <a href="/api/bad">/api/bad</a>
     </p>
 
     <div class="row">
@@ -55,11 +55,10 @@
             <button type="submit">Submit</button>
           </div>
         </form>
-        <p><small>Orders are stored in Postgres.</small></p>
+        <p><small>Orders are stored in Postgres. Bad queries are periodic via <code>scripts/legit_traffic.py</code>.</small></p>
       </div>
     </div>
 
-    <script src="/assets/app.js"></script>
+    <script src="/static/app.js"></script>
   </body>
 </html>
-

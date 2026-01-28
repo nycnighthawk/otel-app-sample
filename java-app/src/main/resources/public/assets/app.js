@@ -27,9 +27,23 @@ async function loadProducts() {
   `;
 }
 
+async function loadBadMode() {
+  try {
+    const res = await fetch("/api/bad/mode");
+    const data = await res.json();
+    const el = document.getElementById("bad_query_mode");
+    if (el) el.textContent = data.bad_query_mode || "unknown";
+  } catch (e) {
+    const el = document.getElementById("bad_query_mode");
+    if (el) el.textContent = "unknown";
+  }
+}
+
 document.getElementById("searchForm").addEventListener("submit", (e) => {
   e.preventDefault();
   loadProducts();
 });
 
+loadBadMode();
 loadProducts();
+
