@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hackathon Shop</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+      .row { display: flex; gap: 20px; }
+      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; width: 100%; }
+      input, button { padding: 8px; }
+      table { width: 100%; border-collapse: collapse; }
+      td, th { border-bottom: 1px solid #eee; padding: 8px; text-align: left; }
+      small { color: #666; }
+      code { background: #f6f6f6; padding: 2px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Hackathon Shop (Uninstrumented)</h1>
+    <p>
+      Bad query mode (server env): <code>{{ bad_query_mode }}</code> |
+      Health: <a href="/api/health">/api/health</a> |
+      Orders: <a href="/api/orders">/api/orders</a> |
+      Bad: <a href="/api/bad">/api/bad</a>
+    </p>
+
+    <div class="row">
+      <div class="card">
+        <h3>Products</h3>
+        <form id="searchForm">
+          <input id="q" placeholder="search..." />
+          <input id="limit" type="number" value="20" min="1" max="100" style="width: 90px;" />
+          <button type="submit">Search</button>
+        </form>
+        <small>Tip: the attacker scanner will hit lots of random URLs to generate 404s.</small>
+        <div id="products"></div>
+      </div>
+
+      <div class="card">
+        <h3>Create Order</h3>
+        <form method="post" action="/api/order">
+          <div>
+            <label>Email</label><br />
+            <input name="customer_email" placeholder="user@example.com" />
+          </div>
+          <div style="margin-top: 8px;">
+            <label>Product ID</label><br />
+            <input name="product_id" type="number" min="1" />
+          </div>
+          <div style="margin-top: 8px;">
+            <label>Qty</label><br />
+            <input name="qty" type="number" min="1" max="50" value="1" />
+          </div>
+          <div style="margin-top: 10px;">
+            <button type="submit">Submit</button>
+          </div>
+        </form>
+        <p><small>Orders are stored in Postgres. Bad queries are periodic via <code>scripts/legit_traffic.py</code>.</small></p>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

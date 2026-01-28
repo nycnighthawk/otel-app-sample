@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otelcol:8889"]
+
+  # OS monitoring via Grafana Alloy (operator/candidate updates targets at runtime)
+  # Each Alloy instance should expose http://<ip>:9100/metrics
+  - job_name: alloy
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          # - "LINUX_HOST_IP:9100"
+          # - "WINDOWS_ATTACKER_VM_IP:9100"
+          []
