@@ -1,7 +1,7 @@
 shares:
-  - server: 10.0.5.5
+  - server: 10.0.2.4
     share: C$
-    directory: Shares/Public
-    username: hackathon.io\domainadmin
-    password: 54((2K<lF_mUXNHJ
+    directory: shares/public
+    username: hackathon.io\hubadmin
+    password: p@ssw0rd123%
 
