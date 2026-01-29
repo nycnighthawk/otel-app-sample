@@ -1,0 +1,25 @@
+{
+  "targets": ["10.1.2.5:8080", "10.1.3.6:8081", "localhost:8080"],
+  "scheme": "http",
+
+  "qps_per_process": 1.5,
+  "bad_every_seconds": 20,
+
+  "processes_per_target": 0,
+  "async_concurrency": 50,
+
+  "extra_random_hits": 1,
+
+  "random_url_paths": [
+    "/",
+    "/health",
+    "/api/products",
+    "/api/orders",
+    "/api/bad",
+    "/api/bad?mode=random_sort",
+    "/api/products?q=a&limit=20"
+  ],
+
+  "report_every_seconds": 10
+}
+

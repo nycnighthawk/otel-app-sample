@@ -5,6 +5,7 @@ NAME="${DB_NAME:-postgres}"
 POSTGRES_USER="${POSTGRES_USER:-shop}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-shop}"
 POSTGRES_DB="${POSTGRES_DB:-shop}"
+VOL="${PG_VOLUME:-shop_pgdata}"
 
 cd "$(dirname "$0")/.."
 
@@ -19,6 +20,7 @@ podman run -d --name "$NAME" \
   -e POSTGRES_USER="$POSTGRES_USER" \
   -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   -e POSTGRES_DB="$POSTGRES_DB" \
+  -v "$VOL:/var/lib/postgresql/data" \
   -v "$(pwd)/scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init_db.sql:ro" \
   docker.io/library/postgres:16-alpine
 
