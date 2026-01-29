@@ -28,11 +28,13 @@ def default_config() -> dict:
     return {
         "targets": ["localhost:8080"],
         "scheme": "http",
+        # If <= 0: run at max throughput per process (bounded by async_concurrency).
         "qps_per_process": 1.5,
         "bad_every_seconds": 20,
         # 0 => use cpu cores
         "processes_per_target": 0,
-        "async_concurrency": 50,
+        # Number of in-flight requests per process (primary performance knob)
+        "async_concurrency": 200,
         "extra_random_hits": 1,
         "random_url_paths": [
             "/",
@@ -40,9 +42,13 @@ def default_config() -> dict:
             "/api/products",
             "/api/orders",
             "/api/bad",
+            "/api/bad?mode=random_sort",
+            "/api/bad?mode=join_bomb"
         ],
         # logging / reporting
         "report_every_seconds": 10,
+        # If true, read full response body (slower, more realistic). If false, release ASAP.
+        "read_response_body": False,
     }
 
 
@@ -132,10 +138,20 @@ def bump(stats: Stats, *, ok=False, bad_status=False, exc=False, timeout=False):
         stats.window_timeouts += 1
 
 
-async def http_get(session: aiohttp.ClientSession, url: str, *, timeout: float, stats: Stats):
+async def http_get(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    timeout: float,
+    stats: Stats,
+    read_body: bool,
+):
     try:
         async with session.get(url, timeout=timeout) as r:
-            await r.read()
+            if read_body:
+                await r.read()
+            else:
+                await r.release()
             if 200 <= r.status < 400:
                 bump(stats, ok=True)
             else:
@@ -146,10 +162,21 @@ async def http_get(session: aiohttp.ClientSession, url: str, *, timeout: float, 
         bump(stats, exc=True)
 
 
-async def http_post(session: aiohttp.ClientSession, url: str, *, data=None, timeout: float, stats: Stats):
+async def http_post(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    data=None,
+    timeout: float,
+    stats: Stats,
+    read_body: bool,
+):
     try:
         async with session.post(url, data=data, timeout=timeout) as r:
-            await r.read()
+            if read_body:
+                await r.read()
+            else:
+                await r.release()
             if 200 <= r.status < 400:
                 bump(stats, ok=True)
             else:
@@ -196,77 +223,128 @@ async def reporter_loop(base_url: str, stats: Stats, every_s: int):
         stats.reset_window(now)
 
 
+def build_next_request(base_url: str, *, now: float, last_bad: float, cfg: dict):
+    bad_every = int(cfg.get("bad_every_seconds", 20))
+    extra_random_hits = int(cfg.get("extra_random_hits", 1))
+    random_url_paths = list(cfg.get("random_url_paths") or default_config()["random_url_paths"])
+
+    reqs = []
+
+    # Main selected traffic
+    r = random.random()
+    if r < 0.6:
+        q = random.choice(PRODUCT_QUERIES)
+        limit = random.choice([10, 20, 50])
+        url = full_url(base_url, "/api/products")
+        reqs.append(("GET", f"{url}?q={q}&limit={limit}", None, TIMEOUT_NORMAL))
+    elif r < 0.85:
+        reqs.append(("GET", full_url(base_url, "/api/orders"), None, TIMEOUT_NORMAL))
+    else:
+        payload = {
+            "customer_email": f"user{random.randint(1, 999)}@example.com",
+            "product_id": random.randint(1, 5000),
+            "qty": random.randint(1, 5),
+        }
+        reqs.append(("POST", full_url(base_url, "/api/order"), payload, TIMEOUT_NORMAL))
+
+    # Periodic bad endpoint
+    new_last_bad = last_bad
+    if now - last_bad >= bad_every:
+        new_last_bad = now
+        reqs.append(("GET", full_url(base_url, "/api/bad"), None, TIMEOUT_BAD))
+
+    # Additional random URL hits (may include query string already)
+    for _ in range(max(0, extra_random_hits)):
+        path = random.choice(random_url_paths)
+        t = TIMEOUT_BAD if str(path).startswith("/api/bad") else TIMEOUT_NORMAL
+        reqs.append(("GET", full_url(base_url, path), None, t))
+
+    return reqs, new_last_bad
+
 async def worker_loop(proc_idx: int, base_url: str, cfg: dict):
+    import contextlib
+
     log = logging.getLogger("worker")
 
     qps = float(cfg.get("qps_per_process", 1.5))
-    bad_every = int(cfg.get("bad_every_seconds", 20))
-    extra_random_hits = int(cfg.get("extra_random_hits", 1))
     async_conc = int(cfg.get("async_concurrency", 50))
-    random_url_paths = list(cfg.get("random_url_paths") or default_config()["random_url_paths"])
     report_every = int(cfg.get("report_every_seconds", 10))
+    read_body = bool(cfg.get("read_response_body", False))
 
     last_bad = 0.0
     stats = Stats(started_at=time.time())
 
-    connector = aiohttp.TCPConnector(limit=async_conc, ttl_dns_cache=300)
+    # Connector tuned for high concurrency per process.
+    connector = aiohttp.TCPConnector(
+        limit=async_conc,
+        limit_per_host=async_conc,
+        ttl_dns_cache=300,
+        enable_cleanup_closed=True,
+    )
     timeout = aiohttp.ClientTimeout(total=None)
 
     log.info(
-        "starting proc=%d target=%s qps=%.3f async_conc=%d extra_random_hits=%d bad_every=%ds report_every=%ds",
+        "starting proc=%d target=%s qps=%.3f (<=0 means max) async_conc=%d read_body=%s report_every=%ds",
         proc_idx,
         base_url,
         qps,
         async_conc,
-        extra_random_hits,
-        bad_every,
+        read_body,
         report_every,
     )
 
+    # Optional pacing. If qps<=0, run flat-out.
+    next_due = time.perf_counter()
+
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         reporter = asyncio.create_task(reporter_loop(base_url, stats, report_every))
+        sem = asyncio.Semaphore(async_conc)
+        in_flight = set()
+
+        async def run_one(method: str, url: str, data, tmo: float):
+            try:
+                if method == "GET":
+                    await http_get(session, url, timeout=tmo, stats=stats, read_body=read_body)
+                else:
+                    await http_post(session, url, data=data, timeout=tmo, stats=stats, read_body=read_body)
+            finally:
+                sem.release()
 
         try:
             while True:
+                if qps > 0:
+                    nowp = time.perf_counter()
+                    if nowp < next_due:
+                        await asyncio.sleep(min(0.01, next_due - nowp))
+                        continue
+                    next_due = nowp + jittered_interval(qps)
+
                 now = time.time()
-                tasks = []
+                reqs, last_bad = build_next_request(base_url, now=now, last_bad=last_bad, cfg=cfg)
 
-                # Main selected traffic
-                r = random.random()
-                if r < 0.6:
-                    q = random.choice(PRODUCT_QUERIES)
-                    limit = random.choice([10, 20, 50])
-                    url = full_url(base_url, "/api/products")
-                    tasks.append(http_get(session, f"{url}?q={q}&limit={limit}", timeout=TIMEOUT_NORMAL, stats=stats))
-                elif r < 0.85:
-                    tasks.append(http_get(session, full_url(base_url, "/api/orders"), timeout=TIMEOUT_NORMAL, stats=stats))
-                else:
-                    payload = {
-                        "customer_email": f"user{random.randint(1, 999)}@example.com",
-                        "product_id": random.randint(1, 5000),
-                        "qty": random.randint(1, 5),
-                    }
-                    tasks.append(http_post(session, full_url(base_url, "/api/order"), data=payload, timeout=TIMEOUT_NORMAL, stats=stats))
+                # Always schedule at least 1 request (blocking until we have capacity).
+                await sem.acquire()
+                method, url, data, tmo = reqs[0]
+                t = asyncio.create_task(run_one(method, url, data, tmo))
+                in_flight.add(t)
+                t.add_done_callback(in_flight.discard)
 
-                # Periodic bad endpoint
-                if now - last_bad >= bad_every:
-                    last_bad = now
-                    tasks.append(http_get(session, full_url(base_url, "/api/bad"), timeout=TIMEOUT_BAD, stats=stats))
+                # Best-effort schedule extra hits without exceeding concurrency.
+                # (Uses sem._value as a fast check; it's internal but works across py3.10+.)
+                for method, url, data, tmo in reqs[1:]:
+                    if getattr(sem, "_value", 0) <= 0:
+                        break
+                    await sem.acquire()
+                    t2 = asyncio.create_task(run_one(method, url, data, tmo))
+                    in_flight.add(t2)
+                    t2.add_done_callback(in_flight.discard)
 
-                # Additional random URL hits (may include query string already)
-                for _ in range(max(0, extra_random_hits)):
-                    path = random.choice(random_url_paths)
-                    t = TIMEOUT_BAD if str(path).startswith("/api/bad") else TIMEOUT_NORMAL
-                    tasks.append(http_get(session, full_url(base_url, path), timeout=t, stats=stats))
-
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
-
-                await asyncio.sleep(jittered_interval(qps))
         finally:
             reporter.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError):
                 await reporter
+            if in_flight:
+                await asyncio.gather(*in_flight, return_exceptions=True)
 
 
 def run_process(proc_idx: int, base_url: str, cfg: dict):
@@ -322,6 +400,5 @@ def main():
 
 
 if __name__ == "__main__":
-    import contextlib
     main()
 
