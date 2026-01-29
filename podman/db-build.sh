@@ -25,6 +25,8 @@ POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-shop}"
 POSTGRES_DB="${POSTGRES_DB:-shop}"
 SEED_ROWS="${SEED_ROWS:-20000}"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 cd "$(dirname "$0")/.."
 
 echo "[+] Creating volume (if needed): $VOL"
@@ -41,7 +43,7 @@ podman run -d --name "$TMP" \
   -e POSTGRES_USER="$POSTGRES_USER" \
   -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
   -e POSTGRES_DB="$POSTGRES_DB" \
-  -p 5433:5432 \
+  -p 5432:5432 \
   -v "$VOL:/var/lib/postgresql/data" \
   -v "$(pwd)/scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init_db.sql:ro" \
   docker.io/library/postgres:16-alpine
@@ -51,10 +53,8 @@ until podman exec "$TMP" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/
   sleep 1
 done
 
-echo "[+] Seeding data (rows=$SEED_ROWS) ..."
-export SEED_ROWS
-export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}"
-python3 scripts/seed.py
+echo "[+] seeding the database"
+bash "${SCRIPT_DIR}/../scripts/re-seed.sh"
 
 echo "[+] Stopping temporary Postgres build container"
 podman rm -f "$TMP" >/dev/null
