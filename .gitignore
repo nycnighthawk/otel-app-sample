@@ -211,3 +211,6 @@ artifacts
 
 # nginx
 .nginx
+
+# vim tags
+.tags

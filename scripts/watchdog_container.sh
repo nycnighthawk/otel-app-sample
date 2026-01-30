@@ -1,4 +1,4 @@
-cat > ~/podman-watchdog-bootstrap.sh <<'EOF'
+cat >~/podman-watchdog-bootstrap.sh <<'EOF'
 #!/bin/sh
 set -eu
 
@@ -31,35 +31,35 @@ install_watchdog() {
 #!/bin/sh
 set -eu
 
-CONTAINERS="$CONTAINERS"
+CONTAINERS="nginx-artifacts keycloak gitea postgres shop-python"
 
-log() { logger -t podman-ensure "\$*"; }
+log() { logger -t podman-ensure "$*"; }
 
-for c in \$CONTAINERS; do
-  if ! podman container exists "\$c" >/dev/null 2>&1; then
-    log "container '\$c' does not exist; skipping"
+for c in $CONTAINERS; do
+  if ! podman container exists "$c" >/dev/null 2>&1; then
+    # Container does not exist; do nothing
     continue
   fi
 
-  if podman inspect -f '{{.State.Running}}' "\$c" 2>/dev/null | grep -qx true; then
+  if podman inspect -f '{{.State.Running}}' "$c" 2>/dev/null | grep -qx true; then
     continue
   fi
 
-  state="\$(podman inspect -f '{{.State.Status}}' "\$c" 2>/dev/null || echo unknown)"
-  case "\$state" in
+  state="$(podman inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo unknown)"
+  case "$state" in
     created|configured|exited|stopped)
-      log "starting container '\$c' (state=\$state)"
-      podman start "\$c" >/dev/null 2>&1 || log "FAILED to start '\$c'"
+      log "starting container '$c' (state=$state)"
+      podman start "$c" >/dev/null 2>&1 || log "FAILED to start '$c'"
       ;;
     paused)
-      log "unpausing container '\$c'"
-      podman unpause "\$c" >/dev/null 2>&1 || log "FAILED to unpause '\$c'"
+      log "unpausing container '$c'"
+      podman unpause "$c" >/dev/null 2>&1 || log "FAILED to unpause '$c'"
       ;;
     running)
       ;;
     *)
-      log "container '\$c' in unexpected state '\$state'; trying restart"
-      podman restart "\$c" >/dev/null 2>&1 || podman start "\$c" >/dev/null 2>&1 || log "FAILED to restart/start '\$c'"
+      log "container '$c' in unexpected state '$state'; trying restart"
+      podman restart "$c" >/dev/null 2>&1 || podman start "$c" >/dev/null 2>&1 || log "FAILED to restart/start '$c'"
       ;;
   esac
 done
