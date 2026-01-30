@@ -1,0 +1,49 @@
+# config.yml
+
+log_path: ./smb_simulate.log
+
+shares:
+  - server: 10.6.2.4
+    share: C$
+    directory: shares/documents
+    username: ZENITH-DYNAMICS\team-admin
+    password: "team@Passw0rd123$"
+    enc_key: "supersecretkey1"
+    file_pick: random
+    fake_run: false    # Set to true for dry-run, false for real run
+
+  - server: 10.7.2.4
+    share: C$
+    directory: shares/documents
+    username: ZENITH-DYNAMICS\team-admin
+    password: "team@Passw0rd123$"
+    enc_key: "supersecretkey1"
+    file_pick: random
+    fake_run: false  # Set to true for dry-run, false for real run
+
+  - server: 10.8.2.4
+    share: C$
+    directory: shares/documents
+    username: ZENITH-DYNAMICS\team-admin
+    password: "team@Passw0rd123$"
+    enc_key: "supersecretkey1"
+    file_pick: random
+    fake_run: false # Set to true for dry-run, false for real run
+
+  - server: 10.9.2.4
+    share: C$
+    directory: shares/documents
+    username: ZENITH-DYNAMICS\team-admin
+    password: "team@Passw0rd123$"
+    enc_key: "supersecretkey1"
+    file_pick: random
+    fake_run: false  # Set to true for dry-run, false for real run
+
+  - server: 10.10.2.4
+    share: C$
+    directory: shares/documents
+    username: ZENITH-DYNAMICS\team-admin
+    password: "team@Passw0rd123$"
+    enc_key: "supersecretkey1"
+    file_pick: random
+    fake_run: false  # Set to true for dry-run, false for real run
